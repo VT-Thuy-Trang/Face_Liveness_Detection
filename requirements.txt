@@ -4,4 +4,4 @@ torch
 torchvision
 numpy
 scipy
-Pillow
+Pillow	

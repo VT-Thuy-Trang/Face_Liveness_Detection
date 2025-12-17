@@ -1,48 +1,44 @@
-﻿# models/texture_cnn.py
-import torch
+﻿import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class LivenessNet(nn.Module):
+class TextureCNN(nn.Module):
     def __init__(self, num_classes=2):
-        super(LivenessNet, self).__init__()
-        # Block 1
+        super(TextureCNN, self).__init__()
+        # Input: Ảnh màu (3 kênh RGB) kích thước 64x64
+        
+        # Layer 1: 64x64 -> 32x32 (sau pool)
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(16)
-        self.pool1 = nn.MaxPool2d(2, 2)
-        self.dropout1 = nn.Dropout(0.25)
-
-        # Block 2
-        self.conv3 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(32)
-        self.conv4 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.bn4 = nn.BatchNorm2d(32)
-        self.pool2 = nn.MaxPool2d(2, 2)
-        self.dropout2 = nn.Dropout(0.25)
-
-        # Fully Connected
-        # Input ảnh resize về 32x32 -> qua 2 lần pool -> còn 8x8
-        self.fc1 = nn.Linear(32 * 8 * 8, 64)
-        self.bn_fc = nn.BatchNorm1d(64)
-        self.dropout_fc = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(64, num_classes)
+        
+        # Layer 2: 32x32 -> 16x16 (sau pool)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(32)
+        
+        # Layer 3: 16x16 -> 8x8 (sau pool)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(64)
+        
+        # Max Pooling (giảm kích thước đi 2 lần)
+        self.pool = nn.MaxPool2d(2, 2)
+        
+        # Fully Connected Layer
+        # Tính toán: 64 kênh * 8 * 8 (kích thước ảnh cuối cùng) = 4096
+        self.fc1 = nn.Linear(64 * 8 * 8, 128)
+        self.dropout = nn.Dropout(0.5)
+        self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = self.pool1(x)
-        x = self.dropout1(x)
-
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = F.relu(self.bn4(self.conv4(x)))
-        x = self.pool2(x)
-        x = self.dropout2(x)
-
-        x = x.view(x.size(0), -1) # Flatten
-        x = F.relu(self.bn_fc(self.fc1(x)))
-        x = self.dropout_fc(x)
-        x = self.fc2(x)
+        # Qua 3 tầng Conv + ReLU + Pool
+        x = self.pool(F.relu(self.bn1(self.conv1(x))))
+        x = self.pool(F.relu(self.bn2(self.conv2(x))))
+        x = self.pool(F.relu(self.bn3(self.conv3(x))))
         
+        # Duỗi ảnh ra (Flatten)
+        x = x.view(-1, 64 * 8 * 8) 
+        
+        # Phân loại
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
         return x

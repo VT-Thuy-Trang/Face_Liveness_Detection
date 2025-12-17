@@ -4,13 +4,13 @@ from torchvision import transforms
 from PIL import Image
 import cv2
 import numpy as np
-from models.texture_cnn import LivenessNet
+from models.texture_cnn import TextureCNN
 import os
 
 class TextureDetector:
     def __init__(self, model_path, device='cpu'):
         self.device = device
-        self.model = LivenessNet(num_classes=2).to(self.device)
+        self.model = TextureCNN(num_classes=2).to(self.device)
         self.loaded = False
         
         if os.path.exists(model_path):
