@@ -1,5 +1,6 @@
 ﻿from scipy.spatial import distance as dist
 
+# Hàm tính Eye Aspect Ratio (EAR)
 def eye_aspect_ratio(eye):
     # Tính khoảng cách giữa các điểm chiều dọc mắt
     A = dist.euclidean(eye[1], eye[5])

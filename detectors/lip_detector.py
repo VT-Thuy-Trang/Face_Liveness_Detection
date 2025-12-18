@@ -1,6 +1,7 @@
 ﻿from scipy.spatial import distance as dist
 import numpy as np
 
+# lớp LipDetector sử dụng tỷ lệ khung hình môi để phát hiện mở miệng
 class LipDetector:
     def __init__(self, threshold=0.3):
         self.threshold = threshold # Ngưỡng mở miệng

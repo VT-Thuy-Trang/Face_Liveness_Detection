@@ -1,77 +1,148 @@
 ﻿import cv2
 import numpy as np
+import time
+import random
 from detectors.face_detector import FaceDetector
-from detectors.texture_detector import TextureDetector
-from detectors.blink_detector import BlinkDetector
+from detectors.emotion_detector import EmotionDetector
+from detectors.motion_detector import MotionDetector
+
+STATE_WAITING = 0      # Chờ khuôn mặt ổn định
+STATE_ANALYZING = 1    # Phân tích ảnh tĩnh/động
+STATE_CHALLENGE = 2    # Thử thách hành động
+STATE_RESULT = 3       # Hiển thị kết quả
+
+# Ngưỡng phát hiện ảnh tĩnh (Nếu motion_score < 1.5 -> Ảnh)
+STATIC_THRESHOLD = 1.5 
 
 def main():
     # 1. Khởi tạo
     face_det = FaceDetector()
-    tex_det = TextureDetector(model_path='models/trained_model.pth')
-    blink_det = BlinkDetector(threshold=0.25)
+    emotion_det = EmotionDetector()
+    motion_det = MotionDetector() # Class mới từ file riêng
 
     cap = cv2.VideoCapture(0)
     
-    blink_count = 0
-    blink_registered = False # Cờ đánh dấu trạng thái mắt
+    # Biến trạng thái
+    current_state = STATE_WAITING
+    
+    # Biến Challenge
+    challenge_type = ""
+    challenge_timer = 0
+    CHALLENGE_LIMIT = 5.0
+    
+    # Biến Kết quả
+    result_text = ""
+    result_color = (0,0,0)
+    result_timer = 0
 
-
+    print("--- Hệ thống liveness---")
 
     while True:
         ret, frame = cap.read()
         if not ret: break
+        
+        frame = cv2.flip(frame, 1)
+        h, w, _ = frame.shape
 
         # 2. Phát hiện mặt
-        landmarks, shape = face_det.detect(frame)
+        landmarks, shape = face_det.detect(frame) 
         
-        status = "Waiting..."
-        color = (200, 200, 200)
-
-        if landmarks:
-            h, w, _ = shape
-            x, y, w_rect, h_rect = face_det.get_bbox(landmarks, shape)
+        if not landmarks:
+            # Reset khi không có mặt
+            current_state = STATE_WAITING # Trở về trạng thái chờ
+            motion_det.reset()
             
-            # Mở rộng vùng mặt để lấy texture tốt hơn
-            pad = 10
-            x1, y1 = max(0, x-pad), max(0, y-pad)
-            x2, y2 = min(w, x+w_rect+pad), min(h, y+h_rect+pad)
-            face_crop = frame[y1:y2, x1:x2]
+            cv2.putText(frame, "Waiting for face...", (50, 50), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2) # Hiển thị thông báo
+        
+        else:
+            # Lấy tọa độ khung mặt
+            fx, fy, fw, fh = face_det.get_bbox(landmarks, shape)
+        
+            # Vẽ khung 
+            cv2.rectangle(frame, (fx, fy), (fx+fw, fy+fh), (255, 0, 0), 2)
+            #hiển thị dù đang ở trạng thái nào
+            current_emotion, emotion_color = emotion_det.detect_state(landmarks, w, h)
+            
+            # Hiển thị text cảm xúc ngay trên đầu khung mặt
+            cv2.putText(frame, f"Emotion: {current_emotion}", (fx, fy - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, emotion_color, 2)
 
-            # 3. Check Texture (Deep Learning)
-            if face_crop.size > 0:
-                real_score = tex_det.predict(face_crop)
-                
-                # 4. Check Blink (Logic)
-                is_closed = blink_det.check(landmarks, w, h)
-                if is_closed:
-                    blink_registered = True
-                
-                if blink_registered and not is_closed:
-                    blink_count += 1
-                    blink_registered = False # Reset sau khi mở mắt ra
+            # Cập nhật điểm chuyển động
+            motion_score = motion_det.update(landmarks)
+            
+            #Hiển thị chỉ số Motion ở dưới đáy khung
+            cv2.putText(frame, f"Motion Score: {motion_score:.2f}", (fx, fy + fh + 20), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
-                # 5. Quyết định
-                # Điều kiện: Texture phải giống thật (>70%) VÀ đã chớp mắt ít nhất 1 lần
-                if real_score > 0.7:
-                    if blink_count >= 1:
-                        status = "REAL FACE (ACCESS GRANTED)"
-                        color = (0, 255, 0) # Xanh lá
-                    else:
-                        status = "Texture OK. Please Blink!"
-                        color = (0, 255, 255) # Vàng
+            
+            if current_state == STATE_WAITING:
+                # Chờ thu thập đủ dữ liệu chuyển động (khoảng 20 frames)
+                if len(motion_det.history) >= 20:
+                    current_state = STATE_ANALYZING
+
+            elif current_state == STATE_ANALYZING:
+                cv2.putText(frame, "Checking Static...", (fx, fy - 40), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+                
+                # Kiểm tra ảnh tĩnh
+                if motion_score < STATIC_THRESHOLD:
+                    current_state = STATE_RESULT
+                    result_text = "FAKE: STATIC PHOTO"
+                    result_color = (0, 0, 255) # Đỏ
+                    result_timer = time.time()
                 else:
-                    status = "FAKE / SPOOF DETECTED"
-                    color = (0, 0, 255) # Đỏ
+                    # Nếu không phải ảnh tĩnh -> Vào thử thách
+                    challenges = ["SMILE", "SURPRISE", "BLINK"]
+                    challenge_type = random.choice(challenges)
+                    challenge_timer = time.time()
+                    current_state = STATE_CHALLENGE
 
-            # Vẽ khung
-            cv2.rectangle(frame, (x, y), (x+w_rect, y+h_rect), color, 2)
-            cv2.putText(frame, f"Score: {real_score:.2f} | Blinks: {blink_count}", (x, y-10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            elif current_state == STATE_CHALLENGE:
+                elapsed = time.time() - challenge_timer
+                time_left = CHALLENGE_LIMIT - elapsed
+                
+                # Hiển thị yêu cầu
+                msg = f"Challenge: {challenge_type}"
+                cv2.putText(frame, msg, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+                cv2.putText(frame, f"Time: {time_left:.1f}s", (50, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 1)
 
-        # Hiển thị
-        cv2.putText(frame, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-        cv2.imshow("Project Demo - VS2022", frame)
+                # Bảo vệ: Vẫn check ảnh tĩnh liên tục trong lúc challenge
+                if motion_score < STATIC_THRESHOLD:
+                     current_state = STATE_RESULT
+                     result_text = "FAKE: STATIC DETECTED"
+                     result_color = (0, 0, 255)
+                     result_timer = time.time()
 
+                # Kiểm tra cảm xúc có khớp với yêu cầu không
+                passed = False
+                if challenge_type == "SMILE" and current_emotion == "SMILING": passed = True
+                elif challenge_type == "SURPRISE" and current_emotion == "SURPRISED": passed = True
+                elif challenge_type == "BLINK" and "BLINKING" in current_emotion: passed = True
+
+                if passed: # Thử thách thành công
+                    current_state = STATE_RESULT
+                    result_text = "ACCESS GRANTED"
+                    result_color = (0, 255, 0) # Xanh lá
+                    result_timer = time.time()
+                
+                if time_left <= 0: # Hết thời gian thử thách
+                    current_state = STATE_RESULT
+                    result_text = "FAILED: TIME OUT"
+                    result_color = (0, 0, 255) 
+                    result_timer = time.time()
+
+            elif current_state == STATE_RESULT: # Hiển thị kết quả
+                # Hiển thị kết quả to giữa màn hình
+                cv2.putText(frame, result_text, (50, h // 2), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.5, result_color, 4)
+                
+                # Tự động reset sau 3 giây
+                if time.time() - result_timer > 3.0:
+                    current_state = STATE_WAITING
+                    motion_det.reset() # Xóa lịch sử chuyển động cũ
+
+        cv2.imshow("Face Liveness System", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 

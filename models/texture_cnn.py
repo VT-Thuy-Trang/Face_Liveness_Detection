@@ -2,6 +2,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
+# Định nghĩa mô hình CNN đơn giản để phân loại ảnh texture1
 class TextureCNN(nn.Module):
     def __init__(self, num_classes=2):
         super(TextureCNN, self).__init__()
@@ -24,15 +25,15 @@ class TextureCNN(nn.Module):
         
         # Fully Connected Layer
         # Tính toán: 64 kênh * 8 * 8 (kích thước ảnh cuối cùng) = 4096
-        self.fc1 = nn.Linear(64 * 8 * 8, 128)
-        self.dropout = nn.Dropout(0.5)
-        self.fc2 = nn.Linear(128, num_classes)
+        self.fc1 = nn.Linear(64 * 8 * 8, 128) # 128 neurons
+        self.dropout = nn.Dropout(0.5) # Dropout để tránh overfitting
+        self.fc2 = nn.Linear(128, num_classes) # Output layer
 
     def forward(self, x):
         # Qua 3 tầng Conv + ReLU + Pool
-        x = self.pool(F.relu(self.bn1(self.conv1(x))))
-        x = self.pool(F.relu(self.bn2(self.conv2(x))))
-        x = self.pool(F.relu(self.bn3(self.conv3(x))))
+        x = self.pool(F.relu(self.bn1(self.conv1(x)))) # 64x64 -> 32x32
+        x = self.pool(F.relu(self.bn2(self.conv2(x)))) # 32x32 -> 16x16
+        x = self.pool(F.relu(self.bn3(self.conv3(x)))) # 16x16 -> 8x8
         
         # Duỗi ảnh ra (Flatten)
         x = x.view(-1, 64 * 8 * 8) 
