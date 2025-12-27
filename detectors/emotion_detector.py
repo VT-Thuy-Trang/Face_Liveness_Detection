@@ -5,10 +5,10 @@ from utils.landmarks import LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW, LI
 class EmotionDetector:
     def __init__(self):
         # Các ngưỡng (Threshold) có thể cần tinh chỉnh tùy camera
-        self.BLINK_THRESH = 0.22      # Dưới mức này là nhắm mắt
-        self.SMILE_THRESH = 0.45      # Mở rộng miệng bề ngang hoặc tỉ lệ khóe miệng
+        self.BLINK_THRESH = 0.18      # Dưới mức này là nhắm mắt
+        self.SMILE_THRESH = 0.42    # Mở rộng miệng bề ngang hoặc tỉ lệ khóe miệng
         self.SURPRISE_THRESH = 0.5    # Mở miệng rộng theo chiều dọc (há hốc)
-        self.ANGRY_THRESH = 0.85      # Khoảng cách lông mày co lại
+        self.ANGRY_THRESH = 0.25    # Khoảng cách lông mày co lại
 
     def _get_aspect_ratio(self, points):
         # Tính toán tỉ lệ mở của mắt (EAR)
